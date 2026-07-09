@@ -1,38 +1,259 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Shri Swami Samarth Breakdown Report</title>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Diesel Management</title>
 
-    <style>
-        html, body {
-            margin: 0;
-            padding: 0;
-            width: 100%;
-            height: 100%;
-            overflow: hidden;
-            background: #fff;
-        }
+  <style>
+    body {
+      margin: 0;
+      font-family: Arial, sans-serif;
+      background: linear-gradient(135deg, #0D47A1, #1565C0);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
 
-        iframe {
-            width: 100%;
-            height: 100%;
-            border: none;
-            position: fixed;
-            top: 0;
-            left: 0;
-        }
-    </style>
+    .box {
+      background: white;
+      width: 360px;
+      padding: 30px;
+      border-radius: 18px;
+      box-shadow: 0 15px 40px rgba(0,0,0,0.25);
+    }
+
+    h2 {
+      text-align: center;
+      margin-bottom: 25px;
+    }
+
+    input, select, textarea, button {
+      width: 100%;
+      padding: 12px;
+      margin-bottom: 12px;
+      border-radius: 8px;
+      border: 1px solid #ccc;
+      font-size: 15px;
+      box-sizing: border-box;
+    }
+
+    button {
+      background: #1565C0;
+      color: white;
+      border: none;
+      font-weight: bold;
+      cursor: pointer;
+    }
+
+    button:hover {
+      background: #0D47A1;
+    }
+
+    .hidden {
+      display: none;
+    }
+
+    .card {
+      background: #f5f5f5;
+      padding: 12px;
+      margin-top: 10px;
+      border-radius: 8px;
+    }
+
+    .msg {
+      text-align: center;
+      font-weight: bold;
+      margin-top: 10px;
+    }
+  </style>
 </head>
 
 <body>
 
-<iframe
-    src="https://script.google.com/macros/s/AKfycbz2mio0gPJs4ECd3GJzmwRmdvtmRlpND7OYtqLqhBYET-JlppMPTDesgLVLM7ezZvoexQ/exec"
-    allow="fullscreen"
-    loading="eager">
-</iframe>
+<div class="box" id="loginBox">
+  <h2>Diesel Management</h2>
+  <input type="text" id="username" placeholder="Username">
+  <input type="password" id="password" placeholder="Password">
+  <button onclick="login()">Sign In</button>
+  <div class="msg" id="loginMsg"></div>
+</div>
+
+<div class="box hidden" id="appBox">
+  <h2>Diesel Issue</h2>
+
+  <div class="card">
+    <b>User:</b> <span id="userName"></span><br>
+    <b>Site:</b> <span id="userSite"></span>
+  </div>
+
+  <input type="date" id="entryDate">
+
+  <select id="issueType">
+    <option value="">Select Issue Type</option>
+    <option value="Vehicle Number">Vehicle Number / Serial Number</option>
+    <option value="Contractor">Contractor</option>
+    <option value="Other">Other</option>
+    <option value="Transfer Diesel">Transfer Diesel</option>
+  </select>
+
+  <input type="text" id="nameOfIssue" placeholder="Vehicle / Contractor / Details">
+  <input type="text" id="erpCode" placeholder="ERP Code">
+  <input type="number" id="dieselQty" placeholder="Diesel Qty">
+  <textarea id="remarks" placeholder="Remarks"></textarea>
+
+  <button onclick="saveEntry()">Save Entry</button>
+  <button onclick="loadDashboard()">Refresh Dashboard</button>
+  <button onclick="logout()">Logout</button>
+
+  <div class="card">
+    <b>Today Issue:</b> <span id="todayQty">0</span> L<br>
+    <b>Month Issue:</b> <span id="monthQty">0</span> L<br>
+    <b>Total Entries:</b> <span id="totalEntries">0</span>
+  </div>
+
+  <div class="msg" id="appMsg"></div>
+</div>
+
+<script>
+  const API_URL = "https://script.google.com/macros/s/AKfycbyfxGCtsizvJJjcducWlw3TSk16UHMbI2MPd7Gw8svE-Eb6oLylEk7RBNHOl7dONwIGRg/exec";
+
+  let currentUser = null;
+
+  document.getElementById("entryDate").value = new Date().toISOString().split("T")[0];
+
+  function apiCall(action, params, success, failure) {
+    const callbackName = "cb_" + Date.now() + "_" + Math.floor(Math.random() * 100000);
+
+    params = params || {};
+    params.action = action;
+    params.callback = callbackName;
+
+    const query = Object.keys(params).map(function(k) {
+      return encodeURIComponent(k) + "=" + encodeURIComponent(params[k]);
+    }).join("&");
+
+    const script = document.createElement("script");
+    script.src = API_URL + "?" + query;
+
+    window[callbackName] = function(data) {
+      success(data);
+      delete window[callbackName];
+      script.remove();
+    };
+
+    script.onerror = function() {
+      delete window[callbackName];
+      script.remove();
+      if (failure) failure();
+    };
+
+    document.body.appendChild(script);
+  }
+
+  function login() {
+    const u = document.getElementById("username").value.trim();
+    const p = document.getElementById("password").value.trim();
+
+    if (!u || !p) {
+      document.getElementById("loginMsg").innerText = "Enter username and password";
+      return;
+    }
+
+    apiCall("login", { username: u, password: p }, function(res) {
+      if (res.success) {
+        currentUser = res;
+        sessionStorage.setItem("dieselUser", JSON.stringify(res));
+
+        document.getElementById("loginBox").classList.add("hidden");
+        document.getElementById("appBox").classList.remove("hidden");
+
+        document.getElementById("userName").innerText = res.fullName;
+        document.getElementById("userSite").innerText = res.site;
+
+        loadDashboard();
+      } else {
+        document.getElementById("loginMsg").innerText = res.message;
+      }
+    }, function() {
+      document.getElementById("loginMsg").innerText = "Connection error";
+    });
+  }
+
+  function saveEntry() {
+    if (!currentUser) return;
+
+    const entry = {
+      date: document.getElementById("entryDate").value,
+      site: currentUser.site,
+      issueType: document.getElementById("issueType").value,
+      nameOfIssue: document.getElementById("nameOfIssue").value,
+      erpCode: document.getElementById("erpCode").value,
+      dieselQty: document.getElementById("dieselQty").value,
+      remarks: document.getElementById("remarks").value,
+      siteFrom: "",
+      siteTo: "",
+      transferQty: 0,
+      enteredBy: currentUser.username
+    };
+
+    if (!entry.date || !entry.issueType || !entry.nameOfIssue || !entry.dieselQty) {
+      document.getElementById("appMsg").innerText = "Fill required fields";
+      return;
+    }
+
+    apiCall("saveBulkEntries", {
+      entries: JSON.stringify([entry])
+    }, function(res) {
+      document.getElementById("appMsg").innerText = res.message;
+
+      document.getElementById("issueType").value = "";
+      document.getElementById("nameOfIssue").value = "";
+      document.getElementById("erpCode").value = "";
+      document.getElementById("dieselQty").value = "";
+      document.getElementById("remarks").value = "";
+
+      loadDashboard();
+    }, function() {
+      document.getElementById("appMsg").innerText = "Save failed";
+    });
+  }
+
+  function loadDashboard() {
+    if (!currentUser) return;
+
+    apiCall("getDashboardData", {
+      site: currentUser.site
+    }, function(d) {
+      document.getElementById("todayQty").innerText = Number(d.todayQty || 0).toFixed(1);
+      document.getElementById("monthQty").innerText = Number(d.monthQty || 0).toFixed(1);
+      document.getElementById("totalEntries").innerText = d.totalEntries || 0;
+    });
+  }
+
+  function logout() {
+    currentUser = null;
+    sessionStorage.removeItem("dieselUser");
+    document.getElementById("loginBox").classList.remove("hidden");
+    document.getElementById("appBox").classList.add("hidden");
+  }
+
+  window.onload = function() {
+    const saved = sessionStorage.getItem("dieselUser");
+    if (saved) {
+      currentUser = JSON.parse(saved);
+
+      document.getElementById("loginBox").classList.add("hidden");
+      document.getElementById("appBox").classList.remove("hidden");
+
+      document.getElementById("userName").innerText = currentUser.fullName;
+      document.getElementById("userSite").innerText = currentUser.site;
+
+      loadDashboard();
+    }
+  };
+</script>
 
 </body>
 </html>
